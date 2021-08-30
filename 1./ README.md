@@ -256,3 +256,5 @@ renderMixin(Vue)
   - 定义了构造函数，调用了 this._init(options) 方法
   - 给 Vue 中混入了常用的实例成员
 
+### 
+
