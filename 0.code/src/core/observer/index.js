@@ -51,6 +51,7 @@ export class Observer {
     def(value, '__ob__', this)
     if (Array.isArray(value)) {
       // 数组的响应式处理
+      // 判断浏览器是否支持 __proto__
       if (hasProto) {
         protoAugment(value, arrayMethods)
       } else {

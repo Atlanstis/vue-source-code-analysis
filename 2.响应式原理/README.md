@@ -286,7 +286,7 @@ export function popTarget () {
 }
 ```
 
-当调用 dep.depend() 方法时，会将观察对象与 watcher 建立依赖，此时对应的 watcher 对象会被存放至 subs 数组中。
+当调用 dep.depend() 方法时，会将观察对象与 watcher 建立依赖，此时对应的 watcher 对象会被存放至 subs 数组中。 
 
 ```js
 let uid = 0
@@ -345,3 +345,84 @@ export default class Watcher {
 }
 ```
 
+## 数组响应式处理
+
+数组的响应处理主要是要在 类 Observer 实例化的构造函数中。
+
+```js
+export class Observer {
+  // ...
+  constructor (value: any) {
+    // ...
+    if (Array.isArray(value)) {
+      // 数组的响应式处理
+      // 判断浏览器是否支持 __proto__
+      if (hasProto) {
+        protoAugment(value, arrayMethods)
+      } else {
+        copyAugment(value, arrayMethods, arrayKeys)
+      }
+      // 为数组中的每一个对象创建一个 observer 实例
+      this.observeArray(value)
+    } else {
+      // ...
+    }
+  }
+  observeArray (items: Array<any>) {
+    for (let i = 0, l = items.length; i < l; i++) {
+      observe(items[i])
+    }
+  }
+}
+```
+
+针对数组的 push，unshift 等方法，通过这些方法的调用，而导致数组的内容发生变化时，是无法被监听到的，因此，对这些方法进行了重写。
+
+```js
+const arrayProto = Array.prototype
+// 使用数组的原型创建一个新的对象
+export const arrayMethods = Object.create(arrayProto)
+// 修改数组元素的方法
+const methodsToPatch = [
+  'push',
+  'pop',
+  'shift',
+  'unshift',
+  'splice',
+  'sort',
+  'reverse'
+]
+/**
+ * Intercept mutating methods and emit events
+ */
+methodsToPatch.forEach(function (method) {
+  // cache original method
+  // 保存数组的原方法
+  const original = arrayProto[method]
+  // 调用 Object.defineProperty() 重新定义修改数组的方法
+  def(arrayMethods, method, function mutator (...args) {
+    // 执行数组的原方法
+    const result = original.apply(this, args)
+    // 获取数组对象的 ob 对象
+    const ob = this.__ob__
+    let inserted
+    switch (method) {
+      case 'push':
+      case 'unshift':
+        inserted = args
+        break
+      case 'splice':
+        inserted = args.slice(2)
+        break
+    }
+    // 对插入的新元素，重新遍历数组元素设置为响应式数据
+    if (inserted) ob.observeArray(inserted)
+    // notify change
+    // 调用修改数组的方法，调用数组的 ob 对象发送通知
+    ob.dep.notify()
+    return result
+  })
+})
+```
+
+ 
