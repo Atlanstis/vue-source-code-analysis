@@ -376,7 +376,7 @@ export class Observer {
 }
 ```
 
-针对数组的 push，unshift 等方法，通过这些方法的调用，而导致数组的内容发生变化时，是无法被监听到的，因此，对这些方法进行了重写。
+针对数组的 push，unshift 等方法，通过这些方法的调用，而导致数组的内容发生变化时，无法通过 dep.notify() 进行视图的更新。因此，对这些方法进行了重写。
 
 ```js
 const arrayProto = Array.prototype
