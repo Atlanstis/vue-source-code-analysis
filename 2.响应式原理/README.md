@@ -255,3 +255,93 @@ export function defineReactive (
 
 ## 依赖收集
 
+- 在 defineReactive() 函数中，我们给属性定义了 getter 跟 setter 两个方法， 当访问这个属性的值的时候，就会进行依赖的收集。
+- 依赖收集的本质是将依赖该属性的 watcher 对象添加到  dep 对象的 subs 数组中。当数据发生变化时，通知所有的 watcher。
+- dep 存在于两个地方：
+  - observer 对象中含有一个属性 dep 对象
+    -  为当前这个子对象收集依赖：当子对象的成员发生添加或删除时触发
+  - defineReactive 方法中给每个属性创建了一个 dep 对象
+    - 负责收集每一个属性的依赖
+
+在创建 watcher 过程中，调用 wather 对象的 get 方法时，通过 pushTarget 方法，将当前 watcher 对象赋值给 Dep.target。
+
+在 vue2.x 中，每一个组件对应一个 watcher 对象，当组件间有嵌套时（a 组件渲染了 b 组件），当渲染 b 组件时，a 组件的渲染将会被挂载起来，因此 a 组件对应的 watcher 对应也会被挂载起来，放入 targetStack 栈中。当 b 组件渲染完成，会将 b 组件对应的 watcher 从栈中移除，再获取 a 组件对应的 watcher。
+
+```js
+// Dep.target 用来存放目前正在使用的 watcher
+// 全局唯一，并且一次也只能有一个 watcher 被使用
+Dep.target = null
+const targetStack = []
+
+// 入栈，并将当前 watcher 赋值给 Dep.target
+export function pushTarget (target: ?Watcher) {
+  targetStack.push(target)
+  Dep.target = target
+}
+
+export function popTarget () {
+  // 出栈操作
+  targetStack.pop()
+  Dep.target = targetStack[targetStack.length - 1]
+}
+```
+
+当调用 dep.depend() 方法时，会将观察对象与 watcher 建立依赖，此时对应的 watcher 对象会被存放至 subs 数组中。
+
+```js
+let uid = 0
+
+/**
+ * A dep is an observable that can have multiple
+ * directives subscribing to it.
+ */
+// dep 是个可观察对象，可以有多个指令订阅它
+export default class Dep {
+  // 静态属性，指代 watcher 对象
+  static target: ?Watcher;
+  // dep 实例 id
+  id: number;
+  // dep 实例对应的 watcher 对象/订阅者数组
+  subs: Array<Watcher>;
+
+  constructor () {
+    this.id = uid++
+    this.subs = []
+  }
+
+  // 添加新的订阅者 watcher 对象
+  addSub (sub: Watcher) {
+    this.subs.push(sub)
+  }
+
+  // 移除订阅者
+  removeSub (sub: Watcher) {
+    remove(this.subs, sub)
+  }
+
+  // 将观察对象与 watcher 建立依赖
+  depend () {
+    if (Dep.target) {
+      // 如果 target 存在，把 dep 对象添加到 watcher 的依赖中
+      Dep.target.addDep(this)
+    }
+  }
+}
+```
+
+```js
+export default class Watcher {
+  // ...
+  addDep (dep: Dep) {
+    const id = dep.id
+    if (!this.newDepIds.has(id)) {
+      this.newDepIds.add(id)
+      this.newDeps.push(dep)
+      if (!this.depIds.has(id)) {
+        dep.addSub(this)
+      }
+    }
+  }
+}
+```
+

@@ -10,9 +10,13 @@ let uid = 0
  * A dep is an observable that can have multiple
  * directives subscribing to it.
  */
+// dep 是个可观察对象，可以有多个指令订阅它
 export default class Dep {
+  // 静态属性，指代 watcher 对象
   static target: ?Watcher;
+  // dep 实例 id
   id: number;
+  // dep 实例对应的 watcher 对象/订阅者数组
   subs: Array<Watcher>;
 
   constructor () {
@@ -20,16 +24,20 @@ export default class Dep {
     this.subs = []
   }
 
+  // 添加新的订阅者 watcher 对象
   addSub (sub: Watcher) {
     this.subs.push(sub)
   }
 
+  // 移除订阅者
   removeSub (sub: Watcher) {
     remove(this.subs, sub)
   }
 
+  // 将观察对象与 watcher 建立依赖
   depend () {
     if (Dep.target) {
+      // 如果 target 存在，把 dep 对象添加到 watcher 的依赖中
       Dep.target.addDep(this)
     }
   }
@@ -52,9 +60,12 @@ export default class Dep {
 // The current target watcher being evaluated.
 // This is globally unique because only one watcher
 // can be evaluated at a time.
+// Dep.target 用来存放目前正在使用的 watcher
+// 全局唯一，并且一次也只能有一个 watcher 被使用
 Dep.target = null
 const targetStack = []
 
+// 入栈，并将当前 watcher 赋值给 Dep.target
 export function pushTarget (target: ?Watcher) {
   targetStack.push(target)
   Dep.target = target
