@@ -425,4 +425,295 @@ methodsToPatch.forEach(function (method) {
 })
 ```
 
- 
+## Watcher
+
+Watcher 分为三种，Computed Watcher，用户 Watcher，渲染 Watcher。
+
+- 渲染 Watcher 的创建时机，代码位于 src/core/instance/lifecycle.js 下。
+
+```js
+// ...
+	updateComponent = () => {
+		vm._update(vm._render(), hydrating)
+	}
+	new Watcher(vm, updateComponent, noop, {
+    before () {
+      if (vm._isMounted && !vm._isDestroyed) {
+        callHook(vm, 'beforeUpdate')
+      }
+    }
+  }, true /* isRenderWatcher */)
+```
+
+Watcher 类的相关代码位于 src/core/observer/watcher.js 下，在创建 Watcher 实例的过程总，触发依赖收集。
+
+```js
+let uid = 0
+
+/**
+ * A watcher parses an expression, collects dependencies,
+ * and fires callback when the expression value changes.
+ * This is used for both the $watch() api and directives.
+ */
+export default class Watcher {
+  vm: Component;
+  expression: string;
+  cb: Function;
+  id: number;
+  deep: boolean;
+  user: boolean;
+  lazy: boolean;
+  sync: boolean;
+  dirty: boolean;
+  active: boolean;
+  deps: Array<Dep>;
+  newDeps: Array<Dep>;
+  depIds: SimpleSet;
+  newDepIds: SimpleSet;
+  before: ?Function;
+  getter: Function;
+  value: any;
+
+  constructor (
+    vm: Component,
+    expOrFn: string | Function,
+    cb: Function,
+    options?: ?Object,
+    isRenderWatcher?: boolean
+  ) {
+    this.vm = vm
+    if (isRenderWatcher) {
+      vm._watcher = this
+    }
+    // 记录当前实例的 watcher，包含 Computed Watcher，用户 Watcher
+    vm._watchers.push(this)
+    // options
+    if (options) {
+      this.deep = !!options.deep
+      this.user = !!options.user
+      this.lazy = !!options.lazy
+      this.sync = !!options.sync
+      this.before = options.before
+    } else {
+      this.deep = this.user = this.lazy = this.sync = false
+    }
+    this.cb = cb
+    // 唯一标识
+    this.id = ++uid // uid for batching
+    // 是否活动
+    this.active = true
+    this.dirty = this.lazy // for lazy watchers
+    // 以下四个记录当前 watcher 相关的 dep 对象
+    this.deps = []
+    this.newDeps = []
+    this.depIds = new Set()
+    this.newDepIds = new Set()
+    this.expression = process.env.NODE_ENV !== 'production'
+      ? expOrFn.toString()
+      : ''
+    // parse expression for getter
+    if (typeof expOrFn === 'function') {
+      this.getter = expOrFn
+    } else {
+      // expOrFn 是字符串的时候，例如 watch: { 'person.name': function... }
+      // parsePath('person.name') 返回一个函数，获取 person.name 的值
+      this.getter = parsePath(expOrFn)
+      if (!this.getter) {
+        this.getter = noop
+        process.env.NODE_ENV !== 'production' && warn(
+          `Failed watching path: "${expOrFn}" ` +
+          'Watcher only accepts simple dot-delimited paths. ' +
+          'For full control, use a function instead.',
+          vm
+        )
+      }
+    }
+    // Computed Watcher 对应的 lazy 为 true，延迟执行
+    this.value = this.lazy
+      ? undefined
+      : this.get()
+  }
+
+  /**
+   * Evaluate the getter, and re-collect dependencies.
+   */
+  get () {
+    pushTarget(this)
+    let value
+    const vm = this.vm
+    try {
+      // 渲染 Watcher 此处执行 updateComponent
+      value = this.getter.call(vm, vm)
+    } catch (e) {
+      if (this.user) {
+        handleError(e, vm, `getter for watcher "${this.expression}"`)
+      } else {
+        throw e
+      }
+    } finally {
+      // "touch" every property so they are all tracked as
+      // dependencies for deep watching
+      if (this.deep) {
+        traverse(value)
+      }
+      popTarget()
+      this.cleanupDeps()
+    }
+    return value
+  }
+	// ...
+}
+```
+
+而当响应式对象发生变化时，会触发 dep 实例的 notify() 方法，触发所有相关的 watcher 的 update() 方法进行更新。
+
+```js
+export default class Dep {
+  // ...
+	// 发布通知
+  notify () {
+    // stabilize the subscriber list first
+    const subs = this.subs.slice()
+    if (process.env.NODE_ENV !== 'production' && !config.async) {
+      // subs aren't sorted in scheduler if not running async
+      // we need to sort them now to make sure they fire in correct
+      // order
+      subs.sort((a, b) => a.id - b.id)
+    }
+    // 调用每个订阅者的 update 方法实现更新
+    for (let i = 0, l = subs.length; i < l; i++) {
+      subs[i].update()
+    }
+  }
+}
+```
+
+```js
+export default class Watcher {
+  // ...
+ 	update () {
+    /* istanbul ignore else */
+    if (this.lazy) {
+      this.dirty = true
+    } else if (this.sync) {
+      this.run()
+    } else {
+      // 渲染 Watcher 直接执行 queueWatcher() 放入队列中执行
+      queueWatcher(this)
+    }
+  } 
+}
+```
+
+触发 watcher 实例的 watcher 方法之后，渲染 Watcher 会执行 queueWatcher() 方法，放入对列中。
+
+在 queueWatcher() 方法中，会根据队列的处理情况，将 watcher 放入队列。
+
+最后，触发 flushSchedulerQueue() 方法。
+
+```js
+export function queueWatcher (watcher: Watcher) {
+  const id = watcher.id
+  // 防止 watcher 重复处理
+  if (has[id] == null) {
+    has[id] = true
+    // 判断是否正在刷新，代表 watcher 是否正在处理
+    if (!flushing) {
+      // 不在处理，则放入队列，适当时机执行
+      queue.push(watcher)
+    } else {
+      // if already flushing, splice the watcher based on its id
+      // if already past its id, it will be run next immediately.
+      // 正在处理，放入适当位置
+      let i = queue.length - 1
+      while (i > index && queue[i].id > watcher.id) {
+        i--
+      }
+      queue.splice(i + 1, 0, watcher)
+    }
+    // queue the flush
+    if (!waiting) {
+      waiting = true
+
+      if (process.env.NODE_ENV !== 'production' && !config.async) {
+        flushSchedulerQueue()
+        return
+      }
+      // flushSchedulerQueue 遍历所有的 watcher，并且调用 watcher 的 run() 方法
+      nextTick(flushSchedulerQueue)
+    }
+  }
+}
+```
+
+在 flushSchedulerQueue() 方法中，对 watcher 进行了排序，最后顺序触发 watcher 的 run() 方法。
+
+```js
+function flushSchedulerQueue () {
+  currentFlushTimestamp = getNow()
+  // 标记正在执行
+  flushing = true
+  let watcher, id
+
+  // Sort queue before flush.
+  // This ensures that:
+  // 1. Components are updated from parent to child. (because parent is always
+  //    created before the child)
+  // 2. A component's user watchers are run before its render watcher (because
+  //    user watchers are created before the render watcher)
+  // 3. If a component is destroyed during a parent component's watcher run,
+  //    its watchers can be skipped.
+  // 排序
+  // 1. 确保组件的更新顺序从父组件到子组件
+  // 2. 组件的 用户 Watcher 在渲染 Watcher 之前执行
+  // 3. 当子组件在父组件 的 watcher 执行时被销毁，则子组件 watcher 应该被跳过
+  queue.sort((a, b) => a.id - b.id)
+
+  // do not cache length because more watchers might be pushed
+  // as we run existing watchers
+  for (index = 0; index < queue.length; index++) {
+    watcher = queue[index]
+    if (watcher.before) {
+      watcher.before()
+    }
+    id = watcher.id
+    has[id] = null
+    watcher.run()
+    // ...
+  }
+  // ...
+}
+```
+
+在 run() 方法中，重新触发了 get() 方法， 此时 渲染 Watcher 会重新触发 updateComponent() 方法，调用 render() 方法，更新视图。
+
+```js
+export default class Watcher {
+  // ...
+ 	  run () {
+    if (this.active) {
+      const value = this.get()
+      if (
+        value !== this.value ||
+        // Deep watchers and watchers on Object/Arrays should fire even
+        // when the value is the same, because the value may
+        // have mutated.
+        isObject(value) ||
+        this.deep
+      ) {
+        // set new value
+        const oldValue = this.value
+        this.value = value
+        if (this.user) {
+          // 用户 watcher 执行回调
+          const info = `callback for watcher "${this.expression}"`
+          invokeWithErrorHandling(this.cb, this.vm, [value, oldValue], this.vm, info)
+        } else {
+          this.cb.call(this.vm, value, oldValue)
+        }
+      }
+    }
+  }
+}
+```
+

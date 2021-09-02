@@ -54,6 +54,7 @@ export default class Watcher {
     if (isRenderWatcher) {
       vm._watcher = this
     }
+    // 记录当前实例的 watcher，包含 Computed Watcher，用户 Watcher
     vm._watchers.push(this)
     // options
     if (options) {
@@ -66,9 +67,12 @@ export default class Watcher {
       this.deep = this.user = this.lazy = this.sync = false
     }
     this.cb = cb
+    // 唯一标识
     this.id = ++uid // uid for batching
+    // 是否活动
     this.active = true
     this.dirty = this.lazy // for lazy watchers
+    // 以下四个记录当前 watcher 相关的 dep 对象
     this.deps = []
     this.newDeps = []
     this.depIds = new Set()
@@ -80,6 +84,8 @@ export default class Watcher {
     if (typeof expOrFn === 'function') {
       this.getter = expOrFn
     } else {
+      // expOrFn 是字符串的时候，例如 watch: { 'person.name': function... }
+      // parsePath('person.name') 返回一个函数，获取 person.name 的值
       this.getter = parsePath(expOrFn)
       if (!this.getter) {
         this.getter = noop
@@ -91,6 +97,7 @@ export default class Watcher {
         )
       }
     }
+    // Computed Watcher 对应的 lazy 为 true，延迟执行
     this.value = this.lazy
       ? undefined
       : this.get()
@@ -104,6 +111,7 @@ export default class Watcher {
     let value
     const vm = this.vm
     try {
+      // 渲染 Watcher 此处执行 updateComponent
       value = this.getter.call(vm, vm)
     } catch (e) {
       if (this.user) {
@@ -169,6 +177,7 @@ export default class Watcher {
     } else if (this.sync) {
       this.run()
     } else {
+      // 渲染 Watcher 直接执行 queueWatcher() 放入队列中执行
       queueWatcher(this)
     }
   }
@@ -192,6 +201,7 @@ export default class Watcher {
         const oldValue = this.value
         this.value = value
         if (this.user) {
+          // 用户 watcher 执行回调
           const info = `callback for watcher "${this.expression}"`
           invokeWithErrorHandling(this.cb, this.vm, [value, oldValue], this.vm, info)
         } else {

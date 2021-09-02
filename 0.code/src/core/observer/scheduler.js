@@ -70,6 +70,7 @@ if (inBrowser && !isIE) {
  */
 function flushSchedulerQueue () {
   currentFlushTimestamp = getNow()
+  // 标记正在执行
   flushing = true
   let watcher, id
 
@@ -81,6 +82,10 @@ function flushSchedulerQueue () {
   //    user watchers are created before the render watcher)
   // 3. If a component is destroyed during a parent component's watcher run,
   //    its watchers can be skipped.
+  // 排序
+  // 1. 确保组件的更新顺序从父组件到子组件
+  // 2. 组件的 用户 Watcher 在渲染 Watcher 之前执行
+  // 3. 当子组件在父组件 的 watcher 执行时被销毁，则子组件 watcher 应该被跳过
   queue.sort((a, b) => a.id - b.id)
 
   // do not cache length because more watchers might be pushed
@@ -163,13 +168,17 @@ function callActivatedHooks (queue) {
  */
 export function queueWatcher (watcher: Watcher) {
   const id = watcher.id
+  // 防止 watcher 重复处理
   if (has[id] == null) {
     has[id] = true
+    // 判断是否正在刷新，代表 watcher 是否正在处理
     if (!flushing) {
+      // 不在处理，则放入队列，适当时机执行
       queue.push(watcher)
     } else {
       // if already flushing, splice the watcher based on its id
       // if already past its id, it will be run next immediately.
+      // 正在处理，放入适当位置
       let i = queue.length - 1
       while (i > index && queue[i].id > watcher.id) {
         i--
@@ -184,6 +193,7 @@ export function queueWatcher (watcher: Watcher) {
         flushSchedulerQueue()
         return
       }
+      // flushSchedulerQueue 遍历所有的 watcher，并且调用 watcher 的 run() 方法
       nextTick(flushSchedulerQueue)
     }
   }

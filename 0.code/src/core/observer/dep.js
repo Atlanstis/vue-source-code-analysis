@@ -42,6 +42,7 @@ export default class Dep {
     }
   }
 
+  // 发布通知
   notify () {
     // stabilize the subscriber list first
     const subs = this.subs.slice()
@@ -51,6 +52,7 @@ export default class Dep {
       // order
       subs.sort((a, b) => a.id - b.id)
     }
+    // 调用每个订阅者的 update 方法实现更新
     for (let i = 0, l = subs.length; i < l; i++) {
       subs[i].update()
     }
