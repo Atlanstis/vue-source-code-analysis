@@ -281,11 +281,16 @@ export function del (target: Array<any> | Object, key: any) {
   ) {
     warn(`Cannot delete reactive property on undefined, null, or primitive value: ${(target: any)}`)
   }
+  // 判断是否是数组，以及 key 是否合法
   if (Array.isArray(target) && isValidArrayIndex(key)) {
+    // 如果是数组，通过 splice 删除
+    // splice 做过响应式处理
     target.splice(key, 1)
     return
   }
+  // 获取 target 的 ob 对象
   const ob = (target: any).__ob__
+  // 如果 target 是 Vue 实例或者 $data 则直接返回
   if (target._isVue || (ob && ob.vmCount)) {
     process.env.NODE_ENV !== 'production' && warn(
       'Avoid deleting properties on a Vue instance or its root $data ' +
@@ -293,13 +298,16 @@ export function del (target: Array<any> | Object, key: any) {
     )
     return
   }
+  // 如果 target 对象没有 key 属性，直接返回
   if (!hasOwn(target, key)) {
     return
   }
+  // 删除属性
   delete target[key]
   if (!ob) {
     return
   }
+  // 通过 ob 发送通知
   ob.dep.notify()
 }
 
