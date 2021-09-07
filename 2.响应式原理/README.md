@@ -108,7 +108,7 @@ export function observe (value: any, asRootData: ?boolean): Observer | void {
 }
 ```
 
-## Observer
+## Observer 类
 
 - 定义于 src/core/observer/index.js 文件中。
 - 其作用是将数组或对象做响应式处理，将其包含的每一个值进行 getter/setter 处理，用于依赖收集及派发更新。 
@@ -427,7 +427,7 @@ methodsToPatch.forEach(function (method) {
 })
 ```
 
-## Watcher
+## Watcher 类
 
 Watcher 分为三种，Computed Watcher，用户 Watcher，渲染 Watcher。
 
@@ -855,4 +855,142 @@ export function del (target: Array<any> | Object, key: any) {
 }
 ```
 
- 
+## 三种类型的 Watcher
+
+- 没有静态方法，因为 $watch 方法中要使用 Vue 的实例
+- 分为三种 Watcher：计算属性 Watcher，用户 Watcher（侦听器），渲染 Watcher
+  - 创建顺序：计算属性 Watcher，用户 Watcher（侦听器），渲染 Watcher
+
+## $watch
+
+vm.$watch(expOrFn, callback, [options])
+
+- 功能：观察 Vue 实例变化的一个表达式或计算属性函数。回调函数的得到的参数为新值和旧值。表达式只接受监督的键路径。对于更复杂的表达式，用一个函数取代。
+- 参数：
+  - expOrFn：要监视的 $data 中的属性，可以是表达式或函数。
+  - callback：数据变化后执行的函数
+    - 函数：回调函数
+    - 对象：具有 handler 属性（字符串或者函数），如果该属性为字符串，则应对应 methods 中相应定义
+  - options：可选的选项
+    - deep：boolean，深度监听
+    - immediate：boolean，是否立即执行一次回调函数
+- 路径：src/core/instance/state.js
+
+```js
+	Vue.prototype.$watch = function (
+    expOrFn: string | Function,
+    cb: any,
+    options?: Object
+  ): Function {
+    // 获取 Vue 实例 this
+    const vm: Component = this
+    if (isPlainObject(cb)) {
+      // 判断如果 是对象，执行 createWatcher
+      return createWatcher(vm, expOrFn, cb, options)
+    }
+    options = options || {}
+    // 标记为用户 watcher
+    options.user = true
+    // 创建 用户 watcher 对象
+    const watcher = new Watcher(vm, expOrFn, cb, options)
+    // 判断 immediate 如果为 true， 立即执行一次 cb 回调，并把当前值传入
+    if (options.immediate) {
+      const info = `callback for immediate watcher "${watcher.expression}"`
+      pushTarget()
+      invokeWithErrorHandling(cb, vm, [watcher.value], vm, info)
+      popTarget()
+    }
+    // 返回取消监听的方法
+    return function unwatchFn () {
+      watcher.teardown()
+    }
+  }
+
+function createWatcher (
+  vm: Component,
+  expOrFn: string | Function,
+  handler: any,
+  options?: Object
+) {
+  if (isPlainObject(handler)) {
+    options = handler
+    handler = handler.handler
+  }
+  if (typeof handler === 'string') {
+    handler = vm[handler]
+  }
+  return vm.$watch(expOrFn, handler, options)
+}
+```
+
+### 用户 watcher
+
+用户 watcher 的创建位于 src/core/instance/state.js 的 initState() 方法下。
+
+```js
+export function initState (vm: Component) {
+	// ...
+  if (opts.watch && opts.watch !== nativeWatch) {
+    initWatch(vm, opts.watch)
+  }
+}
+
+function initWatch (vm: Component, watch: Object) {
+  for (const key in watch) {
+    const handler = watch[key]
+    if (Array.isArray(handler)) {
+      for (let i = 0; i < handler.length; i++) {
+        createWatcher(vm, key, handler[i])
+      }
+    } else {
+      createWatcher(vm, key, handler)
+    }
+  }
+}
+```
+
+遍历组件中，watch 对象，调用 createWatcher() 方法最后调用 $watcher 进行创建。同时，也可直接调用 vm.$watcher 进行 用户 watcher 的创建。
+
+### 计算属性 Watcher
+
+计算属性 watcher 的创建位于 src/core/instance/state.js 的 initState() 方法下。
+
+```js
+export function initState (vm: Component) {
+	// ...
+  if (opts.computed) initComputed(vm, opts.computed)
+}
+
+const computedWatcherOptions = { lazy: true }
+
+function initComputed (vm: Component, computed: Object) {
+  // $flow-disable-line
+  const watchers = vm._computedWatchers = Object.create(null)
+  // computed properties are just getters during SSR
+  const isSSR = isServerRendering()
+
+  for (const key in computed) {
+    const userDef = computed[key]
+    const getter = typeof userDef === 'function' ? userDef : userDef.get
+    if (process.env.NODE_ENV !== 'production' && getter == null) {
+      warn(
+        `Getter is missing for computed property "${key}".`,
+        vm
+      )
+    }
+
+    if (!isSSR) {
+      // create internal watcher for the computed property.
+      watchers[key] = new Watcher(
+        vm,
+        getter || noop,
+        noop,
+        computedWatcherOptions
+      )
+    }
+  }
+}
+```
+
+创建 计算属性 watcher 中，传递了 { lazy: true } 属性。new Watcher 实例时，延迟求值。
+
