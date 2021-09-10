@@ -26,13 +26,16 @@ const ALWAYS_NORMALIZE = 2
 // wrapper function for providing a more flexible interface
 // without getting yelled at by flow
 export function createElement (
+  // vue 实例
   context: Component,
   tag: any,
   data: any,
   children: any,
   normalizationType: any,
+  // true：手写的 render 函数
   alwaysNormalize: boolean
 ): VNode | Array<VNode> {
+  // 处理传入参数不同的情况
   if (Array.isArray(data) || isPrimitive(data)) {
     normalizationType = children
     children = data
@@ -60,6 +63,7 @@ export function _createElement (
     return createEmptyVNode()
   }
   // object syntax in v-bind
+  // 针对动态组件 <compontent :is="current"></compontent>
   if (isDef(data) && isDef(data.is)) {
     tag = data.is
   }
@@ -80,6 +84,7 @@ export function _createElement (
     }
   }
   // support single function children as default scoped slot
+  // 针对作用域插槽
   if (Array.isArray(children) &&
     typeof children[0] === 'function'
   ) {
@@ -88,15 +93,19 @@ export function _createElement (
     children.length = 0
   }
   if (normalizationType === ALWAYS_NORMALIZE) {
+    // 返回一维数组，处理用户手写的 render
     children = normalizeChildren(children)
   } else if (normalizationType === SIMPLE_NORMALIZE) {
+    // 把二维数组，转换成一维数组
     children = simpleNormalizeChildren(children)
   }
+  // 创建 vnode
   let vnode, ns
   if (typeof tag === 'string') {
     let Ctor
     ns = (context.$vnode && context.$vnode.ns) || config.getTagNamespace(tag)
     if (config.isReservedTag(tag)) {
+      // 是否是 html 的保留标签
       // platform built-in elements
       if (process.env.NODE_ENV !== 'production' && isDef(data) && isDef(data.nativeOn) && data.tag !== 'component') {
         warn(
@@ -109,12 +118,16 @@ export function _createElement (
         undefined, undefined, context
       )
     } else if ((!data || !data.pre) && isDef(Ctor = resolveAsset(context.$options, 'components', tag))) {
+      // 判断是否是 自定义组件
+      // 查找自定义组件构造函数的声明
+      // 根据 Ctor 创建组件的 vnode
       // component
       vnode = createComponent(Ctor, data, context, children, tag)
     } else {
       // unknown or unlisted namespaced elements
       // check at runtime because it may get assigned a namespace when its
       // parent normalizes children
+      // 自定义标签
       vnode = new VNode(
         tag, data, children,
         undefined, undefined, context
