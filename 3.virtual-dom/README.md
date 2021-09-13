@@ -62,6 +62,8 @@ const vm = new Vue({
 
 ## 整体过程分析
 
+<img src="assets/2.create-analysis.png" alt="2.create-analysis" style="zoom:50%;" />
+
 ## VNode 的创建过程
 
 其核心是 createElement()，也就是 h 函数。
