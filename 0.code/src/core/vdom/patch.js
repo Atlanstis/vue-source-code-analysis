@@ -69,14 +69,19 @@ function createKeyToOldIdx (children, beginIdx, endIdx) {
 
 export function createPatchFunction (backend) {
   let i, j
+  // 存储模块中定义的钩子函数
   const cbs = {}
 
+  // modules 节点的属性/事件/样式的操作
+  // nodeOps 节点操作
   const { modules, nodeOps } = backend
 
   for (i = 0; i < hooks.length; ++i) {
+    // cbs['update'] = []
     cbs[hooks[i]] = []
     for (j = 0; j < modules.length; ++j) {
       if (isDef(modules[j][hooks[i]])) {
+        // cbs['update'] = [updateAttrs, updateClass, ...]
         cbs[hooks[i]].push(modules[j][hooks[i]])
       }
     }
@@ -697,26 +702,42 @@ export function createPatchFunction (backend) {
     }
   }
 
+  // 函数柯里化，让一个函数返回一个函数
+  // createPatchFunction({ nodeOps, modules }) 传入平台相关的两个参数
+
   return function patch (oldVnode, vnode, hydrating, removeOnly) {
+    // 新的 VNode 不存在
     if (isUndef(vnode)) {
+      // 老的 VNode 存在，执行 Destory 钩子函数
       if (isDef(oldVnode)) invokeDestroyHook(oldVnode)
       return
     }
 
     let isInitialPatch = false
+    // 新插入的 VNode 队列，用于触发 insert 钩子函数
     const insertedVnodeQueue = []
 
+    // 老的 VNode 不存在
     if (isUndef(oldVnode)) {
+      // 调用组件的 $mount 方法，但并未传入参数，仅创建了存在于内存中，并未挂载到 DOM 树上
       // empty mount (likely as component), create new root element
       isInitialPatch = true
+      // 创建
       createElm(vnode, insertedVnodeQueue)
     } else {
+      // 新旧 VNode 都存在，更新
       const isRealElement = isDef(oldVnode.nodeType)
       if (!isRealElement && sameVnode(oldVnode, vnode)) {
+        // 旧 VNode 不为真实 DOM，且新旧节点相同
+        // 更新操作，diff 算法
         // patch existing root node
         patchVnode(oldVnode, vnode, insertedVnodeQueue, null, null, removeOnly)
       } else {
+        // 旧 VNode 是真实 DOM，创建 VNode
+        // 初始化
         if (isRealElement) {
+
+          // SSR 相关 start
           // mounting to a real element
           // check if this is server-rendered content and if we can perform
           // a successful hydration.
@@ -738,16 +759,21 @@ export function createPatchFunction (backend) {
               )
             }
           }
+          // SSR 相关 end
+
           // either not server-rendered, or hydration failed.
           // create an empty node and replace it
+          // 将真实 DOM 转换成 VNode
           oldVnode = emptyNodeAt(oldVnode)
         }
 
         // replacing existing element
+        // 寻找父元素
         const oldElm = oldVnode.elm
         const parentElm = nodeOps.parentNode(oldElm)
 
         // create new node
+        // 创建 DOM 节点
         createElm(
           vnode,
           insertedVnodeQueue,
@@ -755,6 +781,7 @@ export function createPatchFunction (backend) {
           // leaving transition. Only happens when combining transition +
           // keep-alive + HOCs. (#4590)
           oldElm._leaveCb ? null : parentElm,
+          // 插入到此元素前
           nodeOps.nextSibling(oldElm)
         )
 
@@ -789,6 +816,7 @@ export function createPatchFunction (backend) {
         }
 
         // destroy old node
+        // 移除旧节点
         if (isDef(parentElm)) {
           removeVnodes([oldVnode], 0, 0)
         } else if (isDef(oldVnode.tag)) {
@@ -796,7 +824,7 @@ export function createPatchFunction (backend) {
         }
       }
     }
-
+    // 触发 insert 钩子函数
     invokeInsertHook(vnode, insertedVnodeQueue, isInitialPatch)
     return vnode.elm
   }

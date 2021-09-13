@@ -286,8 +286,168 @@ export function _createElement (
   }
 ```
 
-\_update 的作用是判断 prevVnode 是否存在（即当前节点是否时首次渲染）
+\_update 的作用是判断 prevVnode 是否存在（即当前节点是否时首次渲染），通过 vm.\_\_patch\_\_()  将 VNode 渲染为真实的 DOM。
 
 - 不存在时，将 vm.$el 转换成 vNode，并将新的 vNode 进行比较，并将差异渲染到真实 DOM 上
 - 存在时，比较新旧 vNode，并将差异更新到真实 DOM 上
+
+## patch 函数的初始化
+
+- 路径：src/platforms/web/runtime/index.js
+
+```js
+import { patch } from './patch'
+
+Vue.prototype.__patch__ = inBrowser ? patch : noop
+```
+
+\_\_patch\_\_ 对应于 patch 函数。
+
+### patch
+
+- 路径：src/platforms/web/runtime/patch.js
+
+```js
+// nodeOps：dom 相关操作函数
+import * as nodeOps from 'web/runtime/node-ops'
+import { createPatchFunction } from 'core/vdom/patch'
+// 处理 ref，directives
+import baseModules from 'core/vdom/modules/index'
+// 处理 attrs，class 等
+import platformModules from 'web/runtime/modules/index'
+
+// the directive module should be applied last, after all
+// built-in modules have been applied.
+const modules = platformModules.concat(baseModules)
+
+export const patch: Function = createPatchFunction({ nodeOps, modules })
+```
+
+patch 是一个由高阶函数 createPatchFunction 返回的函数，在 createPatchFunction 函数中，对一些相关操作函数进行了缓存。
+
+### createPatchFunction
+
+- 路径：src/core/vdom/patch.js
+
+```js
+const hooks = ['create', 'activate', 'update', 'remove', 'destroy']
+
+export function createPatchFunction (backend) {
+	let i, j
+  // 存储模块中定义的钩子函数
+  const cbs = {}
+
+  // modules 节点的属性/事件/样式的操作
+  // nodeOps 节点操作
+  const { modules, nodeOps } = backend
+
+  for (i = 0; i < hooks.length; ++i) {
+    // cbs['update'] = []
+    cbs[hooks[i]] = []
+    for (j = 0; j < modules.length; ++j) {
+      if (isDef(modules[j][hooks[i]])) {
+        // cbs['update'] = [updateAttrs, updateClass, ...]
+        cbs[hooks[i]].push(modules[j][hooks[i]])
+      }
+    }
+  }
+  // ...
+  
+  // 函数柯里化，让一个函数返回一个函数
+  // createPatchFunction({ nodeOps, modules }) 传入平台相关的两个参数
+  return function patch (oldVnode, vnode, hydrating, removeOnly) {
+    // ...
+  }
+}
+```
+
+在 createPatchFunction 内部，首先对各个钩子函数对应的数组进行了初始化，并将每个模块相对应的钩子函数存入其中。最后，返回 patch 函数。
+
+## patch 函数执行过程
+
+在 patch 的执行过程中，
+
+- 当新的 VNode 不存在，老的 VNode 存在，执行 Destory 钩子函数。
+- 老的 VNode 不存在，即调用组件的 $mount 方法，但并未传入参数，此时仅创建了存在于内存中，并未挂载到 DOM 树上。
+- 新旧 VNode 都存在：
+  - 旧 VNode 不为真实 DOM，且新旧节点相同：通过 patchVnode 进行 diff 对比差异，并将差异更新到真实 DOM 上。
+  - 旧 VNode 是真实 DOM：将真实 DOM 先转换成 VNode，通过 createElm 将新 VNode 渲染到真实 DOM 上，后移除旧节点。
+- 触发新插入的 VNode 队列的 insert 钩子函数。
+- 返回新 VNode 对应的 DOM 元素。
+
+```js
+	return function patch (oldVnode, vnode, hydrating, removeOnly) {
+    // 新的 VNode 不存在
+    if (isUndef(vnode)) {
+      // 老的 VNode 存在，执行 Destory 钩子函数
+      if (isDef(oldVnode)) invokeDestroyHook(oldVnode)
+      return
+    }
+
+    let isInitialPatch = false
+    // 新插入的 VNode 队列，用于触发 insert 钩子函数
+    const insertedVnodeQueue = []
+
+    // 老的 VNode 不存在
+    if (isUndef(oldVnode)) {
+      // 调用组件的 $mount 方法，但并未传入参数，仅创建了存在于内存中，并未挂载到 DOM 树上
+      // empty mount (likely as component), create new root element
+      isInitialPatch = true
+      // 创建
+      createElm(vnode, insertedVnodeQueue)
+    } else {
+      // 新旧 VNode 都存在，更新
+      const isRealElement = isDef(oldVnode.nodeType)
+      if (!isRealElement && sameVnode(oldVnode, vnode)) {
+        // 旧 VNode 不为真实 DOM，且新旧节点相同
+        // 更新操作，diff 算法
+        // patch existing root node
+        patchVnode(oldVnode, vnode, insertedVnodeQueue, null, null, removeOnly)
+      } else {
+        // 旧 VNode 是真实 DOM，创建 VNode
+        // 初始化
+        if (isRealElement) {
+          // SSR 相关 start
+          // ...
+          // SSR 相关 end
+          // either not server-rendered, or hydration failed.
+          // create an empty node and replace it
+          // 将真实 DOM 转换成 VNode
+          oldVnode = emptyNodeAt(oldVnode)
+        }
+
+        // replacing existing element
+        // 寻找父元素
+        const oldElm = oldVnode.elm
+        const parentElm = nodeOps.parentNode(oldElm)
+
+        // create new node
+        // 创建 DOM 节点
+        createElm(
+          vnode,
+          insertedVnodeQueue,
+          // extremely rare edge case: do not insert if old element is in a
+          // leaving transition. Only happens when combining transition +
+          // keep-alive + HOCs. (#4590)
+          oldElm._leaveCb ? null : parentElm,
+          // 插入到此元素前
+          nodeOps.nextSibling(oldElm)
+        )
+
+				// ...
+        
+        // destroy old node
+        // 移除旧节点
+        if (isDef(parentElm)) {
+          removeVnodes([oldVnode], 0, 0)
+        } else if (isDef(oldVnode.tag)) {
+          invokeDestroyHook(oldVnode)
+        }
+      }
+    }
+    // 触发 insert 钩子函数
+    invokeInsertHook(vnode, insertedVnodeQueue, isInitialPatch)
+    return vnode.elm
+  }
+```
 
