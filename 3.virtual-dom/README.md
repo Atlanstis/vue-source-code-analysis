@@ -565,3 +565,76 @@ createElm 的执行过程如下所示：
   - 普通标签：创建对应的 dom 元素，并遍历 children 调用 createElm 一级级挂载，最后挂载到 dom 树上
   - 注释节点：创建注释节点，挂载到 dom 树上
   - 文本节点：创建文本节点，挂载到 dom 树上
+
+## patchVnode
+
+- 作用：对比新旧 VNode，找到差异，更新到真实 DOM 上。
+- 路径：src/core/vdom/patch.js。
+
+```js
+  function patchVnode (
+    oldVnode,
+    vnode,
+    insertedVnodeQueue,
+    ownerArray,
+    index,
+    removeOnly
+  ) {
+    if (oldVnode === vnode) {
+      return
+    }
+
+    // ...
+
+    let i
+    const data = vnode.data
+    if (isDef(data) && isDef(i = data.hook) && isDef(i = i.prepatch)) {
+      i(oldVnode, vnode)
+    }
+
+    // 获取新旧 VNode 子节点
+    const oldCh = oldVnode.children
+    const ch = vnode.children
+    if (isDef(data) && isPatchable(vnode)) {
+      // 调用 cbs 中的钩子函数，操作节点的属性/样式/事件...
+      for (i = 0; i < cbs.update.length; ++i) cbs.update[i](oldVnode, vnode)
+      // 用户的自定义钩子
+      if (isDef(i = data.hook) && isDef(i = i.update)) i(oldVnode, vnode)
+    }
+    if (isUndef(vnode.text)) {
+      // 新节点没有文本
+      if (isDef(oldCh) && isDef(ch)) {
+        // 新老节点都有子节点
+        // 对子节点进行 diff 操作，调用 updateChildren
+        if (oldCh !== ch) updateChildren(elm, oldCh, ch, insertedVnodeQueue, removeOnly)
+      } else if (isDef(ch)) {
+        // 新的有子节点，老的没有子节点
+        if (process.env.NODE_ENV !== 'production') {
+          checkDuplicateKeys(ch)
+        }
+        // 先清空老节点 DOM 的文本内容，然后为当前 DOM 节点加入子节点
+        if (isDef(oldVnode.text)) nodeOps.setTextContent(elm, '')
+        addVnodes(elm, null, ch, 0, ch.length - 1, insertedVnodeQueue)
+      } else if (isDef(oldCh)) {
+        // 老节点有子节点，新节点没有子节点
+        // 删除老节点中的子节点
+        removeVnodes(oldCh, 0, oldCh.length - 1)
+      } else if (isDef(oldVnode.text)) {
+        // 老节点有文本，新节点没有文本，
+        // 清空老节点文本内容
+        nodeOps.setTextContent(elm, '')
+      }
+    } else if (oldVnode.text !== vnode.text) {
+      // 新老节点都有文本节点
+      // 修改文本
+      nodeOps.setTextContent(elm, vnode.text)
+    }
+    if (isDef(data)) {
+      if (isDef(i = data.hook) && isDef(i = i.postpatch)) i(oldVnode, vnode)
+    }
+  }
+```
+
+## updateChildren
+
+在 patchVnode 中，当新老节点都含有子节点且为相同节点时，会调用 updateChildren 对比两者间的差异，更新到 DOM 树。 
