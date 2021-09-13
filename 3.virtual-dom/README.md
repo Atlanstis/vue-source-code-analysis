@@ -638,3 +638,109 @@ createElm 的执行过程如下所示：
 ## updateChildren
 
 在 patchVnode 中，当新老节点都含有子节点且为相同节点时，会调用 updateChildren 对比两者间的差异，更新到 DOM 树。 
+
+```js
+  // diff 算法
+  // 更新新旧节点的子节点
+  function updateChildren (parentElm, oldCh, newCh, insertedVnodeQueue, removeOnly) {
+    let oldStartIdx = 0
+    let newStartIdx = 0
+    let oldEndIdx = oldCh.length - 1
+    let oldStartVnode = oldCh[0]
+    let oldEndVnode = oldCh[oldEndIdx]
+    let newEndIdx = newCh.length - 1
+    let newStartVnode = newCh[0]
+    let newEndVnode = newCh[newEndIdx]
+    let oldKeyToIdx, idxInOld, vnodeToMove, refElm
+
+    // removeOnly is a special flag used only by <transition-group>
+    // to ensure removed elements stay in correct relative positions
+    // during leaving transitions
+    const canMove = !removeOnly
+
+    if (process.env.NODE_ENV !== 'production') {
+      checkDuplicateKeys(newCh)
+    }
+    // diff 算法
+    // 当新节点与旧节点都没有遍历完成
+    while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
+      if (isUndef(oldStartVnode)) {
+        oldStartVnode = oldCh[++oldStartIdx] // Vnode has been moved left
+      } else if (isUndef(oldEndVnode)) {
+        oldEndVnode = oldCh[--oldEndIdx]
+      } else if (sameVnode(oldStartVnode, newStartVnode)) {
+        // oldStartVnode 和 newStartVnode 相同
+        // 直接将该 VNode 节点进行 patchVnode
+        patchVnode(oldStartVnode, newStartVnode, insertedVnodeQueue, newCh, newStartIdx)
+        // 获取下一组节点
+        oldStartVnode = oldCh[++oldStartIdx]
+        newStartVnode = newCh[++newStartIdx]
+      } else if (sameVnode(oldEndVnode, newEndVnode)) {
+        // oldEndVnode 和 newEndVnode 相同
+        // 直接将该 VNode 节点进行 patchVnode
+        patchVnode(oldEndVnode, newEndVnode, insertedVnodeQueue, newCh, newEndIdx)
+        // 获取下一组节点
+        oldEndVnode = oldCh[--oldEndIdx]
+        newEndVnode = newCh[--newEndIdx]
+      } else if (sameVnode(oldStartVnode, newEndVnode)) { // Vnode moved right
+        // oldStartVnode 和 newEndVnode 相同
+        // 进行 patchVnode，把 oldStartVnode 移动到最后
+        patchVnode(oldStartVnode, newEndVnode, insertedVnodeQueue, newCh, newEndIdx)
+        canMove && nodeOps.insertBefore(parentElm, oldStartVnode.elm, nodeOps.nextSibling(oldEndVnode.elm))
+        // 移动游标，获取下一组节点
+        oldStartVnode = oldCh[++oldStartIdx]
+        newEndVnode = newCh[--newEndIdx]
+      } else if (sameVnode(oldEndVnode, newStartVnode)) { // Vnode moved left
+        // oldEndVnode 和 newStartVnode 相同
+        // 进行 patchVnode，把 oldEndVnode 移动到最左
+        patchVnode(oldEndVnode, newStartVnode, insertedVnodeQueue, newCh, newStartIdx)
+        canMove && nodeOps.insertBefore(parentElm, oldEndVnode.elm, oldStartVnode.elm)
+        // 移动游标，获取下一组节点
+        oldEndVnode = oldCh[--oldEndIdx]
+        newStartVnode = newCh[++newStartIdx]
+      } else {
+        // 以上四种情况都不满足
+        // newStartVnode 依次和旧的节点比较
+
+        // 从新的节点开头获取一个，从老节点中查找相同节点
+        // 先找新开始节点的 key 与老节点相同的索引，如果没找到再通过 sameVnode 查找
+        if (isUndef(oldKeyToIdx)) oldKeyToIdx = createKeyToOldIdx(oldCh, oldStartIdx, oldEndIdx)
+        idxInOld = isDef(newStartVnode.key)
+          ? oldKeyToIdx[newStartVnode.key]
+          : findIdxInOld(newStartVnode, oldCh, oldStartIdx, oldEndIdx)
+          // 如果没有找到
+        if (isUndef(idxInOld)) { // New element
+          // 创建节点并插入到最前面
+          createElm(newStartVnode, insertedVnodeQueue, parentElm, oldStartVnode.elm, false, newCh, newStartIdx)
+        } else {
+          // 找到
+          // 获取要移动的老节点，
+          vnodeToMove = oldCh[idxInOld]
+          // 如果使用 newStartVnode 找到相同的老节点
+          if (sameVnode(vnodeToMove, newStartVnode)) {
+            // 执行 patchVnode，并将找到的旧节点移动到最前面
+            patchVnode(vnodeToMove, newStartVnode, insertedVnodeQueue, newCh, newStartIdx)
+            oldCh[idxInOld] = undefined
+            canMove && nodeOps.insertBefore(parentElm, vnodeToMove.elm, oldStartVnode.elm)
+          } else {
+            // 如果 key 相同，但是是不同的元素，创建新元素
+            // same key but different element. treat as new element
+            createElm(newStartVnode, insertedVnodeQueue, parentElm, oldStartVnode.elm, false, newCh, newStartIdx)
+          }
+        }
+        newStartVnode = newCh[++newStartIdx]
+      }
+    }
+    if (oldStartIdx > oldEndIdx) {
+      // 当结束时，oldStartIdx > oldEndIdx，旧节点遍历完，但是新节点还没有
+      // 说明新节点比老节点多，把剩下的新节点插入到老节点后面
+      refElm = isUndef(newCh[newEndIdx + 1]) ? null : newCh[newEndIdx + 1].elm
+      addVnodes(parentElm, refElm, newCh, newStartIdx, newEndIdx, insertedVnodeQueue)
+    } else if (newStartIdx > newEndIdx) {
+      // newStartIdx > newEndIdx，新节点遍历完，但是老节点还没有
+      // 移除剩余老节点
+      removeVnodes(oldCh, oldStartIdx, oldEndIdx)
+    }
+  }
+```
+
