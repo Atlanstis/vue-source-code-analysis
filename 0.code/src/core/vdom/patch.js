@@ -130,12 +130,17 @@ export function createPatchFunction (backend) {
   function createElm (
     vnode,
     insertedVnodeQueue,
+    // 将 VNode 转换成的 DOM 元素 挂载到（append） parentElm 下
     parentElm,
+    // 将节点插入到 refElm 之前
     refElm,
     nested,
     ownerArray,
     index
   ) {
+    // 如果 vnode 中 有 elm 元素，并且有子节点，克隆 vnode。
+    // 此时不但会克隆 vnode，其子节点，也会同时克隆。
+    // patch 中，只传递了前 4 个参数，不会进入。
     if (isDef(vnode.elm) && isDef(ownerArray)) {
       // This vnode was used in a previous render!
       // now it's used as a new node, overwriting its elm would cause
@@ -146,6 +151,7 @@ export function createPatchFunction (backend) {
     }
 
     vnode.isRootInsert = !nested // for transition enter check
+    // 处理组件
     if (createComponent(vnode, insertedVnodeQueue, parentElm, refElm)) {
       return
     }
@@ -154,6 +160,7 @@ export function createPatchFunction (backend) {
     const children = vnode.children
     const tag = vnode.tag
     if (isDef(tag)) {
+      // 是标签的情况（组件已在上面处理）
       if (process.env.NODE_ENV !== 'production') {
         if (data && data.pre) {
           creatingElmInVPre++
@@ -167,10 +174,12 @@ export function createPatchFunction (backend) {
           )
         }
       }
-
+      
+      // 创建 DOM 元素
       vnode.elm = vnode.ns
         ? nodeOps.createElementNS(vnode.ns, tag)
         : nodeOps.createElement(tag, vnode)
+      // 为 vnode 对应的 dom 元素，设置 css 样式作用域
       setScope(vnode)
 
       /* istanbul ignore if */
@@ -193,10 +202,13 @@ export function createPatchFunction (backend) {
           insert(parentElm, vnode.elm, refElm)
         }
       } else {
+        // 将 vnode 中，所有的子元素转换成 dom 对象
         createChildren(vnode, children, insertedVnodeQueue)
         if (isDef(data)) {
+          // 触发 create 钩子函数
           invokeCreateHooks(vnode, insertedVnodeQueue)
         }
+        // 将 vnode 对应的 dom 插入到 parentElm 下
         insert(parentElm, vnode.elm, refElm)
       }
 
@@ -204,9 +216,11 @@ export function createPatchFunction (backend) {
         creatingElmInVPre--
       }
     } else if (isTrue(vnode.isComment)) {
+      // 是注释节点
       vnode.elm = nodeOps.createComment(vnode.text)
       insert(parentElm, vnode.elm, refElm)
     } else {
+      // 是文本节点
       vnode.elm = nodeOps.createTextNode(vnode.text)
       insert(parentElm, vnode.elm, refElm)
     }
@@ -289,12 +303,15 @@ export function createPatchFunction (backend) {
   function createChildren (vnode, children, insertedVnodeQueue) {
     if (Array.isArray(children)) {
       if (process.env.NODE_ENV !== 'production') {
+        // 判断子元素 是否含有相同的 key
         checkDuplicateKeys(children)
       }
       for (let i = 0; i < children.length; ++i) {
+        // 循环调用，转换成 dom 元素挂载到 dom 树上
         createElm(children[i], insertedVnodeQueue, vnode.elm, null, true, children, i)
       }
     } else if (isPrimitive(vnode.text)) {
+      // vnode.text 为 元素值，穿件文本节点
       nodeOps.appendChild(vnode.elm, nodeOps.createTextNode(String(vnode.text)))
     }
   }
@@ -307,10 +324,12 @@ export function createPatchFunction (backend) {
   }
 
   function invokeCreateHooks (vnode, insertedVnodeQueue) {
+    // 调用 VNode 的钩子函数
     for (let i = 0; i < cbs.create.length; ++i) {
       cbs.create[i](emptyNode, vnode)
     }
     i = vnode.data.hook // Reuse variable
+    // 调用组件的钩子函数
     if (isDef(i)) {
       if (isDef(i.create)) i.create(emptyNode, vnode)
       if (isDef(i.insert)) insertedVnodeQueue.push(vnode)
@@ -781,7 +800,7 @@ export function createPatchFunction (backend) {
           // leaving transition. Only happens when combining transition +
           // keep-alive + HOCs. (#4590)
           oldElm._leaveCb ? null : parentElm,
-          // 插入到此元素前
+          // 获取 oldElm 的下一个兄弟元素，之后会将 vnode 对应的 dom 插入到它之前
           nodeOps.nextSibling(oldElm)
         )
 
