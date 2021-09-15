@@ -1,5 +1,9 @@
 ## 初始化过程
 
+### 首次渲染过程
+
+<img src="assets/首次渲染过程.png" style="zoom:50%;" />
+
 vue 源码中，入口位于 `src/platforms/web` 下。
 
 - entry-runtime-with-compiler.js：对应 编辑器 + 运行时 版本
@@ -253,6 +257,4 @@ renderMixin(Vue)
   - 与平台无关
   - 定义了构造函数，调用了 this._init(options) 方法
   - 给 Vue 中混入了常用的实例成员
-
-### 
 
