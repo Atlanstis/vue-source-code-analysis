@@ -98,7 +98,7 @@ const componentVNodeHooks = {
 
 const hooksToMerge = Object.keys(componentVNodeHooks)
 
-export function createComponent (
+export function  createComponent (
   Ctor: Class<Component> | Function | Object | void,
   data: ?VNodeData,
   context: Component,
@@ -112,6 +112,8 @@ export function createComponent (
   const baseCtor = context.$options._base
 
   // plain options object: turn it into a constructor
+  // 如果 Ctor 不是一个构造函数，是一个对象
+  // 使用 Vue.extend() 创造一个子组件的构造函数
   if (isObject(Ctor)) {
     Ctor = baseCtor.extend(Ctor)
   }
@@ -127,6 +129,7 @@ export function createComponent (
 
   // async component
   let asyncFactory
+  // 处理异步组件
   if (isUndef(Ctor.cid)) {
     asyncFactory = Ctor
     Ctor = resolveAsyncComponent(asyncFactory, baseCtor)
@@ -148,14 +151,17 @@ export function createComponent (
 
   // resolve constructor options in case global mixins are applied after
   // component constructor creation
+  // 当组件构造函数创建完毕后，合并当前组件选项，和通过 Vue.mixins 混入的对象
   resolveConstructorOptions(Ctor)
 
   // transform component v-model data into props & events
+  // 处理组件上的 v-model
   if (isDef(data.model)) {
     transformModel(Ctor.options, data)
   }
 
   // extract props
+  // 提起 props
   const propsData = extractPropsFromVNodeData(data, Ctor, tag)
 
   // functional component
@@ -183,6 +189,8 @@ export function createComponent (
   }
 
   // install component management hooks onto the placeholder node
+  // 安装组件的钩子函数 init/prepatch/insert/destroy
+  // 准备好了 data.hook 中的钩子函数
   installComponentHooks(data)
 
   // return a placeholder vnode
@@ -218,15 +226,20 @@ export function createComponentInstanceForVnode (
   }
   // check inline-template render functions
   const inlineTemplate = vnode.data.inlineTemplate
+  // 获取 inline-template
+  // <comp inline-template> xxxx </comp>
   if (isDef(inlineTemplate)) {
     options.render = inlineTemplate.render
     options.staticRenderFns = inlineTemplate.staticRenderFns
   }
+  // 创建组件实例
   return new vnode.componentOptions.Ctor(options)
 }
 
 function installComponentHooks (data: VNodeData) {
   const hooks = data.hook || (data.hook = {})
+  // 用户可以传递自定义钩子函数
+  // 把用户传入的自定义钩子函数和 componentVNodeHooks 中预定义的钩子函数合并
   for (let i = 0; i < hooksToMerge.length; i++) {
     const key = hooksToMerge[i]
     const existing = hooks[key]
